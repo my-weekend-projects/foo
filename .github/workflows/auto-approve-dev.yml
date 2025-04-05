@@ -1,0 +1,44 @@
+name: Auto Approve PRs in specific directory
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  auto-approve:
+    runs-on: ubuntu-latest
+
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Determine if only files in allowed directory changed
+        id: changed
+        run: |
+          # ✅ CHANGE THIS PATH AS NEEDED
+          MONITORED_PATH="dev/scripts/"
+
+          git fetch origin ${{ github.event.pull_request.base.ref }}
+          git diff --name-only origin/${{ github.event.pull_request.base.ref }} > changed_files.txt
+
+          echo "Changed files:"
+          cat changed_files.txt
+
+          if grep -qvE "^${MONITORED_PATH}" changed_files.txt; then
+            echo "Found files outside '${MONITORED_PATH}' — will NOT approve"
+            echo "approve=false" >> $GITHUB_OUTPUT
+          else
+            echo "All files within '${MONITORED_PATH}' — ready to auto-approve"
+            echo "approve=true" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
+      - name: Auto approve PR
+        if: steps.changed.outputs.approve == 'true'
+        uses: hmarr/auto-approve-action@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
